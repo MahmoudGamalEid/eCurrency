@@ -6,6 +6,8 @@ import org.boon.json.*;
 
 import io.netty.handler.codec.http.multipart.MixedAttribute;
 import io.netty.handler.codec.http.multipart.InterfaceHttpData;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 
 import com.rabbitmq.client.*;
@@ -23,7 +25,24 @@ public class RequestParser implements Runnable {
     
     public void run( ){
         try{
-				
+			HttpRequest request = _clientHandle.getRequest();
+			HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(request);
+			String data = decoder.getBodyHttpDatas().toString();
+			JSONObject json = new JSONObject(data);
+			String action = json.getString("TargetMethod");
+			String sessionID = json.getString("SessionID");
+			String fname = json.getString("fname");
+			String lname = json.getString("lname");
+			String email = json.getString("email");
+			String nationalID = json.getString("nationalID");
+			int balance = json.getInt("balance");
+			Map<String,Object> map = new HashMap<String,Object>() ;
+			map.put("firstName", fname);
+			map.put("lastName", lname);
+			map.put("email", email);
+			map.put("nationalID", nationalID);
+			map.put("Balance", balance);
+			ClientRequest req = new ClientRequest(action,sessionID, map);
         }
         catch( Exception exp ){
             _parseListener.parsingFailed( _clientHandle, "Exception while parsing JSON object " + exp.toString( ) );
