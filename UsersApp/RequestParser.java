@@ -28,7 +28,8 @@ public class RequestParser implements Runnable {
 			HttpRequest request = _clientHandle.getRequest();
 			HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(request);
 			String data = decoder.getBodyHttpDatas().toString();
-			JSONObject json = new JSONObject(data);
+			JSONObject json1 = new JSONObject(data);
+			JSONObject json ;
 			String action = json.getString("TargetMethod");
 			String sessionID = json.getString("SessionID");
 			String fname = json.getString("fname");
@@ -48,30 +49,35 @@ public class RequestParser implements Runnable {
             _parseListener.parsingFailed( _clientHandle, "Exception while parsing JSON object " + exp.toString( ) );
         }
     }
-    public class Recv {
+    public class ReceiveLogs {
+    	  private static final String EXCHANGE_NAME = "Requests";
 
-    	  private final static String QUEUE_NAME = "UsersRequests";
-
-    	  public void MQrecieve() throws Exception {
+    	  public  JSONObject Recieve(String[] argv) throws Exception {
     	    ConnectionFactory factory = new ConnectionFactory();
+    	    JSONObject json = null;
     	    factory.setHost("localhost");
     	    Connection connection = factory.newConnection();
     	    Channel channel = connection.createChannel();
 
-    	    channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+    	    channel.exchangeDeclare(EXCHANGE_NAME, "fanout");
+    	    String queueName = "usersAppRequests";
+    	    channel.queueBind(queueName, EXCHANGE_NAME, "");
+
     	    System.out.println(" [*] Waiting for messages. To exit press CTRL+C");
 
     	    Consumer consumer = new DefaultConsumer(channel) {
     	      @Override
-    	      public void handleDelivery(String consumerTag, Envelope envelope, AMQP.BasicProperties properties, byte[] body)
-    	          throws IOException {
+    	      public void handleDelivery(String consumerTag, Envelope envelope,
+    	                                 AMQP.BasicProperties properties, byte[] body) throws IOException {
     	        String message = new String(body, "UTF-8");
-    	        JSONObject json = new JSONObject(message);
-    	        System.out.println(" [x] Received '" + message + "'");
+    	       // json= new JSONObject(message);
+    	        System.out.println(" [x] Received '" + json.toString() + "'");
     	      }
     	    };
-    	    channel.basicConsume(QUEUE_NAME, true, consumer);
+    	    channel.basicConsume(queueName, true, consumer);
+    	    return json;
     	  }
+    	  
     	}
       
 }
