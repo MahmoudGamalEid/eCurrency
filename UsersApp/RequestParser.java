@@ -28,8 +28,7 @@ public class RequestParser implements Runnable {
 			HttpRequest request = _clientHandle.getRequest();
 			HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(request);
 			String data = decoder.getBodyHttpDatas().toString();
-			JSONObject json1 = new JSONObject(data);
-			JSONObject json ;
+			JSONObject json = new JSONObject(data); 
 			String action = json.getString("TargetMethod");
 			String sessionID = json.getString("SessionID");
 			String fname = json.getString("fname");
@@ -44,12 +43,13 @@ public class RequestParser implements Runnable {
 			map.put("nationalID", nationalID);
 			map.put("Balance", balance);
 			ClientRequest req = new ClientRequest(action,sessionID, map);
+			_parseListener.parsingFinished(_clientHandle, req);
         }
         catch( Exception exp ){
             _parseListener.parsingFailed( _clientHandle, "Exception while parsing JSON object " + exp.toString( ) );
         }
     }
-    public class ReceiveLogs {
+    public class Receive {
     	  private static final String EXCHANGE_NAME = "Requests";
 
     	  public  JSONObject Recieve(String[] argv) throws Exception {
@@ -70,7 +70,8 @@ public class RequestParser implements Runnable {
     	      public void handleDelivery(String consumerTag, Envelope envelope,
     	                                 AMQP.BasicProperties properties, byte[] body) throws IOException {
     	        String message = new String(body, "UTF-8");
-    	       // json= new JSONObject(message);
+    	        // Do not know how to handle those json Objects yet
+    	        // json= new JSONObject(message);
     	        System.out.println(" [x] Received '" + json.toString() + "'");
     	      }
     	    };
