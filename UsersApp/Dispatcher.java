@@ -215,36 +215,36 @@ public class Dispatcher{
 			String              strEmail,
                                 strPassword,
                                 strFirstName,
-                                strnationalID,
                                 strLastName;
-			int 				balance;
+			BigDecimal 			balance;
+			long 				nationalID;
             strEmail    =   (String)mapUserData.get( "email" );
             strPassword =   (String)mapUserData.get( "password" );
             strFirstName=   (String)mapUserData.get( "firstName" ); 
             strLastName =   (String)mapUserData.get( "lastName" );
-            strnationalID = (String)mapUserData.get("nationalID");
-            balance =       (int)mapUserData.get("balance");
+            nationalID = 	(long)mapUserData.get("nationalID");
+            balance =       new BigDecimal((int)mapUserData.get("balance"));
             
             if( strEmail == null || strEmail.trim( ).length( ) == 0 || 
                 strPassword == null || strPassword.trim( ).length( ) == 0  || 
                 strFirstName == null || strFirstName.trim( ).length( ) == 0  ||
-                strLastName == null || strLastName.trim( ).length( ) == 0||
-                strnationalID == null || strnationalID.trim( ).length( ) == 0)
+                strLastName == null || strLastName.trim( ).length( ) == 0)
                return null;
-            
+
             if( !EmailVerifier.verify( strEmail ) )
                 return null;
-               
-            sqlProc = connection.prepareCall("{?=call addUserSimple(?,?,?,?)}");
+
+            sqlProc = connection.prepareCall("{?=call addusersimple(?,?,?)}");
             sqlProc.registerOutParameter(1, Types.INTEGER );
-            sqlProc.setLong(2, balance );
-            sqlProc.setString(3, strPassword );			            
+            sqlProc.setBigDecimal(2, balance);
+            sqlProc.setString(3, strPassword );	
+            sqlProc.setString(4, strEmail);
             sqlProc.execute( );
             int ID = sqlProc.getInt(1);
 			strbufResult = makeJSONResponseEnvelope( ID , null, null );
             sqlProc.close( );
             Document doc = new Document("fname",strFirstName).append("lname",strLastName).append("email", strEmail)
-    				.append("nationalID", strnationalID).append("ID",ID);
+    				.append("nationalID", nationalID).append("ID",ID);
             collection.insertOne(doc);
             return strbufResult;
         }
@@ -252,7 +252,6 @@ public class Dispatcher{
 	class AttemptLoginCmd extends Command implements Runnable {
         
         public StringBuffer execute(Connection connection,  Map<String, Object> mapUserData,MongoCollection<Document> collection) throws Exception {
-            
             CallableStatement   sqlProc;
 			StringBuffer		strbufResult = null,
 								strbufResponseJSON;
@@ -265,18 +264,18 @@ public class Dispatcher{
 			
 			strEmail    =	((String)mapUserData.get( "email" ));
 			strPassword =	((String)mapUserData.get( "password" ));
-			
+			System.out.println(strEmail + strPassword);
             if( strEmail == null || strEmail.trim( ).length( ) == 0 ||
                 strPassword == null || strPassword.trim( ).length( ) == 0 )
                 return null;
             
-            if( !EmailVerifier.verify( strEmail ) )
-                return null;
-            
+            if( !EmailVerifier.verify( strEmail ) ) {
+            	System.err.println("Not an actual email");
+                return null;}
             strClientIP		=	_clientHandle.getClientIP( );
 			strSessionID 	=	UUID.randomUUID( ).toString( );
-            
-            sqlProc = connection.prepareCall("{?=call attemptLogin(?,?,?,?)}");
+            System.out.println("About to call SQL now");
+            sqlProc = connection.prepareCall("{?=call attemptuserLogin(?,?,?,?)}");
             sqlProc.registerOutParameter( 1, Types.INTEGER );
             sqlProc.setString(2, strEmail  );		
             sqlProc.setString(3, strPassword  );	
@@ -286,18 +285,18 @@ public class Dispatcher{
 			nSQLResult = sqlProc.getInt( 1 );
             sqlProc.close( );
 			if( nSQLResult >= 0 ){
-				Cache.addSession( strSessionID, strEmail );
-				System.err.println(" adding following session to Cache " + strSessionID );
+				//Cache.addSession( strSessionID, strEmail );
+				//System.err.println(" adding following session to Cache " + strSessionID );
 				Map<String, Object> mapResult = new HashMap<String, Object>( );
 				mapResult.put( "userID", Integer.toString( nSQLResult)  );
 				mapResult.put( "sessionID", strSessionID );
-                sqlProc = connection.prepareCall( "{?=call getUserFirstName(?)}" );
+               /* sqlProc = connection.prepareCall( "{?=call getUserFirstName(?)}" );
                 sqlProc.registerOutParameter( 1, Types.VARCHAR );
                 sqlProc.setInt( 2, nSQLResult  );	
                 sqlProc.execute( );
                 strFirstName = sqlProc.getString( 1 );
                 sqlProc.close( );
-                mapResult.put( "firstName", strFirstName );
+                mapResult.put( "firstName", strFirstName );*/
 				strbufResponseJSON	=	serializeMaptoJSON( mapResult, null );
 				strbufResult = makeJSONResponseEnvelope( 0, null, strbufResponseJSON  );
 			}
@@ -308,29 +307,72 @@ public class Dispatcher{
             return strbufResult;
         }
     }
-      
-    protected void dispatchRequest( ClientHandle  clientHandle, 
-									ClientRequest clientRequest ) throws Exception{
+	class LogoutCmd extends Command implements Runnable {
+        
+        public StringBuffer execute(Connection connection,  Map<String, Object> mapUserData,MongoCollection<Document> collection) throws Exception {
+            
+            CallableStatement   sqlProc;
+			StringBuffer		strbufResult = null;
+            String	            sessionID;
+            sessionID = 		_clientRequest.getSessionID();
+			int		            nSQLResult;
 
+            if( sessionID == null || sessionID.trim( ).length( ) == 0  )
+                return null;
+
+            sqlProc = connection.prepareCall("{?=call userlogout(?)}");
+            sqlProc.registerOutParameter( 1, Types.INTEGER );
+            sqlProc.setString(2, sessionID  );		
+            sqlProc.execute( );
+			nSQLResult = sqlProc.getInt( 1 );
+            sqlProc.close( );
+            strbufResult = makeJSONResponseEnvelope( nSQLResult , null, null );
+            return strbufResult;
+        }
+    }
+	class getBalanceCmd extends Command implements Runnable {
+        
+        public StringBuffer execute(Connection connection,  Map<String, Object> mapUserData,MongoCollection<Document> collection) throws Exception {
+            
+            CallableStatement   sqlProc;
+			StringBuffer		strbufResult = null;
+            String	            sessionID;
+			int		            nSQLResult;
+			
+			sessionID    =	_clientRequest.getSessionID();
+            if( sessionID == null || sessionID.trim( ).length( ) == 0  )
+                return null;
+
+            sqlProc = connection.prepareCall("{?=call getUserBalance(?)}");
+            sqlProc.registerOutParameter( 1, Types.INTEGER );
+            sqlProc.setString(2, sessionID  );		
+            sqlProc.execute( );
+			nSQLResult = sqlProc.getInt(1);
+            sqlProc.close( );
+            strbufResult = makeJSONResponseEnvelope( nSQLResult , null, null );
+            return strbufResult;
+        }
+    } 
+	protected void dispatchRequest( ClientHandle  clientHandle, 
+									ClientRequest clientRequest ) throws Exception{
 		Command				cmd;
 		String				strAction;
 		strAction				 = clientRequest.getAction( );
-        
 		Class<?> innerClass		 = (Class<?>)_htblCommands.get( strAction );
 		Class<?> enclosingClass  = Class.forName( "Dispatcher" );
         Object enclosingInstance = enclosingClass.newInstance( );
 		Constructor<?> ctor 	 = innerClass.getDeclaredConstructor( enclosingClass );
         cmd = (Command) ctor.newInstance( enclosingInstance );
 		cmd.init( _hikariDataSource, clientHandle, clientRequest );
-        _threadPoolCmds.execute( (Runnable) cmd );
+		_threadPoolCmds.execute( (Runnable) cmd );
+        
     }
       
 	protected void loadHikari( String strAddress, int nPort, 
                                 String strDBName, 
                                 String strUserName, String strPassword   ){
-
 		_hikariDataSource 	= new HikariDataSource(  );
-		_hikariDataSource.setJdbcUrl( "jdbc:postgresql://" + strAddress + ":" + nPort + "/" + strDBName  );
+		_hikariDataSource.setJdbcUrl( "jdbc:postgresql://" + strAddress + ":" + nPort + "/" + strDBName);
 		_hikariDataSource.setUsername( strUserName );
 		_hikariDataSource.setPassword( strPassword );
 	}
@@ -371,9 +413,10 @@ public class Dispatcher{
 		 return collection;
 	}
     public void init( ) throws Exception{
-        loadHikari( "localhost", 5432, "thedatabase", "postgres", "thepassword");
+        loadHikari( "localhost", 5432, "ecurrency", "mahmoud", "rezingard1731");
         loadThreadPool( );
         loadCommands( );
         
 	}  
+    
 }
